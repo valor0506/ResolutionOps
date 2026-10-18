@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "server": ".venv/bin/uvicorn server.main:app --reload --port 8000",
+    "test": ".venv/bin/python -m unittest tests/test_api.py",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
