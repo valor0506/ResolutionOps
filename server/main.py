@@ -7,6 +7,7 @@ from server.routes.customers import router as customers_router
 from server.routes.knowledge_base import router as knowledge_base_router
 from server.routes.diagnostics import router as diagnostics_router
 from server.routes.overview import router as overview_router
+from server.routes.ai import router as ai_router
 
 app = FastAPI(
     title="ResolutionOps API",
@@ -30,3 +31,4 @@ app.include_router(customers_router, prefix="/api")
 app.include_router(knowledge_base_router, prefix="/api")
 app.include_router(diagnostics_router, prefix="/api")
 app.include_router(overview_router, prefix="/api")
+app.include_router(ai_router, prefix="/api")

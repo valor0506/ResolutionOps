@@ -13,6 +13,7 @@ import {
   Send,
   Sparkles,
   Layers,
+  MessageSquare,
 } from 'lucide-react'
 import { apiFetch } from '../lib/api'
 import type {
@@ -47,8 +48,15 @@ export function CaseDetailPage() {
   const [noteText, setNoteText] = useState('')
   const [addingNote, setAddingNote] = useState(false)
 
-  // Copy indicator
+  // Copy indicators
   const [copiedHandoff, setCopiedHandoff] = useState(false)
+  const [copiedDraft, setCopiedDraft] = useState(false)
+
+  // AI actions state
+  const [investigatingWithAi, setInvestigatingWithAi] = useState(false)
+  const [generatingHandoff, setGeneratingHandoff] = useState(false)
+  const [customerDraft, setCustomerDraft] = useState<string>('')
+  const [draftingResponse, setDraftingResponse] = useState(false)
 
   useEffect(() => {
     let ignore = false
@@ -165,6 +173,52 @@ export function CaseDetailPage() {
     }
   }
 
+  const handleAiInvestigate = async () => {
+    if (!caseId) return
+    setInvestigatingWithAi(true)
+    try {
+      const res = await apiFetch<{ case_id: string; hypotheses: DiagnosticHypothesis[] }>(
+        `/ai/cases/${caseId}/investigate`,
+        { method: 'POST' }
+      )
+      setHypotheses(res.hypotheses)
+    } catch (err) {
+      alert(`AI Investigation failed: ${(err as Error).message}`)
+    } finally {
+      setInvestigatingWithAi(false)
+    }
+  }
+
+  const handleAiGenerateHandoff = async () => {
+    if (!caseId) return
+    setGeneratingHandoff(true)
+    try {
+      const res = await apiFetch<EngineeringHandoff>(`/ai/cases/${caseId}/generate-handoff`, {
+        method: 'POST',
+      })
+      setHandoff(res)
+    } catch (err) {
+      alert(`AI Handoff Generation failed: ${(err as Error).message}`)
+    } finally {
+      setGeneratingHandoff(false)
+    }
+  }
+
+  const handleDraftCustomerResponse = async () => {
+    if (!caseId) return
+    setDraftingResponse(true)
+    try {
+      const res = await apiFetch<{ case_id: string; draft: string }>(
+        `/ai/cases/${caseId}/customer-response`
+      )
+      setCustomerDraft(res.draft)
+    } catch (err) {
+      alert(`Drafting response failed: ${(err as Error).message}`)
+    } finally {
+      setDraftingResponse(false)
+    }
+  }
+
   const handleCopyHandoff = () => {
     if (!handoff) return
     const text = `# Engineering Handoff — ${caseData?.id}: ${caseData?.title}
@@ -191,6 +245,13 @@ ${handoff.acceptance_criteria.map((c) => `- [ ] ${c}`).join('\n')}
     navigator.clipboard.writeText(text)
     setCopiedHandoff(true)
     setTimeout(() => setCopiedHandoff(false), 2000)
+  }
+
+  const handleCopyCustomerDraft = () => {
+    if (!customerDraft) return
+    navigator.clipboard.writeText(customerDraft)
+    setCopiedDraft(true)
+    setTimeout(() => setCopiedDraft(false), 2000)
   }
 
   if (loading) {
@@ -446,7 +507,7 @@ ${handoff.acceptance_criteria.map((c) => `- [ ] ${c}`).join('\n')}
               }`}
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
-              Verification Gate
+              Resolution & Verification
             </button>
           </div>
 
@@ -608,12 +669,21 @@ ${handoff.acceptance_criteria.map((c) => `- [ ] ${c}`).join('\n')}
           {/* TAB 3: DIAGNOSTIC HYPOTHESES */}
           {activeTab === 'hypotheses' && (
             <div className="rounded-b-xl rounded-tr-xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-6">
-              <div>
-                <h3 className="text-sm font-semibold text-slate-900">Ranked Root-Cause Hypotheses</h3>
-                <p className="text-xs text-slate-500">
-                  Grounded hypotheses synthesized from available traces, logs, and customer history.
-                  Requires human acceptance or rejection.
-                </p>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">Ranked Root-Cause Hypotheses</h3>
+                  <p className="text-xs text-slate-500">
+                    Grounded hypotheses synthesized from available traces, logs, and customer history.
+                  </p>
+                </div>
+                <button
+                  onClick={handleAiInvestigate}
+                  disabled={investigatingWithAi}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors shadow-xs"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {investigatingWithAi ? 'Synthesizing with Gemini...' : 'AI Re-Investigate'}
+                </button>
               </div>
 
               <div className="space-y-4">
@@ -703,20 +773,30 @@ ${handoff.acceptance_criteria.map((c) => `- [ ] ${c}`).join('\n')}
           {/* TAB 4: ENGINEERING HANDOFF */}
           {activeTab === 'handoff' && (
             <div className="rounded-b-xl rounded-tr-xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900">Structured Engineering Handoff</h3>
                   <p className="text-xs text-slate-500">
                     Comprehensive technical dossier for escalating to core engineering or platform reliability.
                   </p>
                 </div>
-                <button
-                  onClick={handleCopyHandoff}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  {copiedHandoff ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                  {copiedHandoff ? 'Copied Markdown' : 'Copy Handoff'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleAiGenerateHandoff}
+                    disabled={generatingHandoff}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {generatingHandoff ? 'Regenerating...' : 'Regenerate with AI'}
+                  </button>
+                  <button
+                    onClick={handleCopyHandoff}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    {copiedHandoff ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copiedHandoff ? 'Copied Markdown' : 'Copy Handoff'}
+                  </button>
+                </div>
               </div>
 
               {handoff ? (
@@ -762,7 +842,7 @@ ${handoff.acceptance_criteria.map((c) => `- [ ] ${c}`).join('\n')}
             </div>
           )}
 
-          {/* TAB 5: RESOLUTION VERIFICATION GATE */}
+          {/* TAB 5: RESOLUTION & VERIFICATION GATE */}
           {activeTab === 'verification' && (
             <div className="rounded-b-xl rounded-tr-xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-6">
               <div>
@@ -825,6 +905,48 @@ ${handoff.acceptance_criteria.map((c) => `- [ ] ${c}`).join('\n')}
                         Approve Case Closure & Mark Resolved
                       </button>
                     </div>
+                  </div>
+
+                  {/* Customer Response Draft Generator */}
+                  <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-3 pt-6 border-t border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4 text-blue-600" />
+                        <h4 className="text-xs font-semibold text-slate-900">Grounded Customer Response Draft</h4>
+                      </div>
+                      <button
+                        onClick={handleDraftCustomerResponse}
+                        disabled={draftingResponse}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50"
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        {draftingResponse ? 'Drafting...' : 'Draft with Gemini'}
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-slate-500">
+                      AI drafts a technical update citing verified findings and next steps without making unverified promises.
+                    </p>
+
+                    {customerDraft && (
+                      <div className="space-y-2">
+                        <textarea
+                          rows={6}
+                          value={customerDraft}
+                          onChange={(e) => setCustomerDraft(e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 p-3 text-xs text-slate-800 font-sans leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        />
+                        <div className="flex justify-end">
+                          <button
+                            onClick={handleCopyCustomerDraft}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            {copiedDraft ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                            {copiedDraft ? 'Copied Response' : 'Copy Response Draft'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (

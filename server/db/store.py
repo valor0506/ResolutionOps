@@ -456,3 +456,4 @@ class DataStore:
 
 # Global singleton instance
 store = DataStore()
+

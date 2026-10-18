@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, ShieldAlert, Sparkles, ChevronRight, X } from 'lucide-react'
+import { Plus, Search, ShieldAlert, Sparkles, ChevronRight, X, HelpCircle } from 'lucide-react'
 import { apiFetch } from '../lib/api'
-import type { Case, CasePriority, CaseStatus } from '../types/domain'
+import type { Case, CasePriority, CaseStatus, IntakeParseResponse } from '../types/domain'
 
 export function CasesPage() {
   const [cases, setCases] = useState<Case[]>([])
@@ -15,6 +15,8 @@ export function CasesPage() {
   // Quick intake state
   const [intakeText, setIntakeText] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState('cust-northstar')
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysisResult, setAnalysisResult] = useState<IntakeParseResponse | null>(null)
   const [creating, setCreating] = useState(false)
 
   const fetchCases = useCallback(() => {
@@ -39,30 +41,77 @@ export function CasesPage() {
     return () => clearTimeout(timer)
   }, [fetchCases])
 
-  const handleQuickIntakeSubmit = async (e: React.FormEvent) => {
+  const handleAnalyzeIntake = async () => {
+    if (!intakeText.trim()) return
+    setAnalyzing(true)
+    try {
+      const parsed = await apiFetch<IntakeParseResponse>('/ai/intake-parse', {
+        method: 'POST',
+        body: JSON.stringify({
+          unstructured_complaint: intakeText,
+          customer_id: selectedCustomerId,
+        }),
+      })
+      setAnalysisResult(parsed)
+      if (parsed.suggested_customer_id) {
+        setSelectedCustomerId(parsed.suggested_customer_id)
+      }
+    } catch (err) {
+      alert(`AI Intake Analysis failed: ${(err as Error).message}`)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const handleCreateCaseFromIntake = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!intakeText.trim()) return
 
     setCreating(true)
     try {
+      const payload = analysisResult
+        ? {
+            title: analysisResult.concise_summary,
+            customer_id: selectedCustomerId,
+            priority:
+              analysisResult.suggested_severity === 'Sev-1'
+                ? 'Critical'
+                : analysisResult.suggested_severity === 'Sev-2'
+                ? 'High'
+                : 'Medium',
+            severity: analysisResult.suggested_severity,
+            summary: analysisResult.concise_summary,
+            expected_behavior: analysisResult.expected_behavior || 'Normal operation',
+            actual_behavior: analysisResult.actual_behavior || intakeText,
+            symptoms: [analysisResult.concise_summary],
+            reproduction_steps: analysisResult.known_reproduction_steps,
+            environment: analysisResult.environment || 'production',
+            timestamps: analysisResult.available_timestamps,
+            request_ids: analysisResult.request_ids,
+            missing_information: analysisResult.missing_information,
+          }
+        : {
+            title: intakeText.slice(0, 80),
+            customer_id: selectedCustomerId,
+            priority: 'High',
+            severity: 'Sev-2',
+            summary: intakeText,
+            expected_behavior: 'Workflow completes without error',
+            actual_behavior: intakeText,
+            symptoms: [intakeText.slice(0, 60)],
+            reproduction_steps: ['Customer submitted complaint via portal'],
+            environment: 'production',
+            missing_information: ['Exact timestamps', 'Request correlation IDs'],
+          }
+
       await apiFetch<Case>('/cases', {
         method: 'POST',
-        body: JSON.stringify({
-          title: intakeText.slice(0, 80),
-          customer_id: selectedCustomerId,
-          priority: 'High',
-          severity: 'Sev-2',
-          summary: intakeText,
-          expected_behavior: 'Workflow completes without error',
-          actual_behavior: intakeText,
-          symptoms: [intakeText.slice(0, 60)],
-          reproduction_steps: ['Customer submitted complaint via portal'],
-          environment: 'production',
-          missing_information: ['Exact timestamps', 'Request correlation IDs', 'Browser/client version'],
-        }),
+        body: JSON.stringify(payload),
       })
+
       setShowNewModal(false)
       setIntakeText('')
+      setAnalysisResult(null)
       fetchCases()
     } catch (err) {
       alert(`Error creating case: ${(err as Error).message}`)
@@ -124,7 +173,10 @@ export function CasesPage() {
             Northstar Incident (CASE-2026-0891)
           </Link>
           <button
-            onClick={() => setShowNewModal(true)}
+            onClick={() => {
+              setShowNewModal(true)
+              setAnalysisResult(null)
+            }}
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-xs"
           >
             <Plus className="h-4 w-4" />
@@ -286,8 +338,8 @@ export function CasesPage() {
 
       {/* Guided Intake Modal */}
       {showNewModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-2xl w-full p-6 my-8">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-blue-600" />
@@ -302,11 +354,11 @@ export function CasesPage() {
             </div>
 
             <p className="text-xs text-slate-500 mb-4">
-              Paste raw, unstructured complaints from emails or chat tickets. The system will
-              validate mandatory fields, identify missing diagnostic details, and create an investigation case.
+              Paste raw customer complaints from Zendesk, Salesforce, or Slack. Gemini extracts structured fields,
+              validates reproduction steps, and flags missing diagnostic evidence.
             </p>
 
-            <form onSubmit={handleQuickIntakeSubmit} className="space-y-4">
+            <form onSubmit={handleCreateCaseFromIntake} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1">
                   Customer Account
@@ -332,13 +384,77 @@ export function CasesPage() {
                   rows={4}
                   value={intakeText}
                   onChange={(e) => setIntakeText(e.target.value)}
-                  placeholder="e.g. Our API returned success for an order at 04:15, but our dashboard still shows it as pending..."
+                  placeholder="e.g. Our API returned success for order ORD-98421 at 04:15 UTC, but our dashboard still shows it as pending. Request ID was req-8849-a1fc. This is blocking our fulfillment."
                   className="w-full rounded-lg border border-slate-200 p-3 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   required
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-2">
+              {/* Analyze with AI Button */}
+              <div className="flex justify-between items-center pt-1">
+                <button
+                  type="button"
+                  onClick={handleAnalyzeIntake}
+                  disabled={analyzing || !intakeText.trim()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100 transition-colors disabled:opacity-50"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {analyzing ? 'Analyzing with Gemini...' : 'Analyze with AI'}
+                </button>
+
+                {analysisResult && (
+                  <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Structured Extraction Complete
+                  </span>
+                )}
+              </div>
+
+              {/* AI Structured Preview Card */}
+              {analysisResult && (
+                <div className="rounded-xl border border-blue-100 bg-slate-50/70 p-4 space-y-3 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-800">Extracted Summary</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-800 border border-rose-200">
+                      Suggested Severity: {analysisResult.suggested_severity}
+                    </span>
+                  </div>
+                  <p className="text-slate-700 bg-white p-2 rounded border border-slate-200 font-medium">
+                    {analysisResult.concise_summary}
+                  </p>
+                  <p className="text-[11px] text-slate-500 italic">
+                    Rationale: {analysisResult.severity_rationale}
+                  </p>
+
+                  {analysisResult.request_ids.length > 0 && (
+                    <div>
+                      <span className="font-semibold text-slate-700 block mb-1">Detected IDs:</span>
+                      <div className="flex flex-wrap gap-1">
+                        {analysisResult.request_ids.map((id) => (
+                          <span key={id} className="font-mono text-[10px] bg-slate-200 px-1.5 py-0.5 rounded">
+                            {id}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {analysisResult.clarification_questions.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg space-y-1">
+                      <div className="flex items-center gap-1.5 font-semibold text-amber-900 text-xs">
+                        <HelpCircle className="h-3.5 w-3.5" />
+                        Targeted Clarification Questions to Ask Customer:
+                      </div>
+                      <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-800">
+                        {analysisResult.clarification_questions.map((q, i) => (
+                          <li key={i}>{q}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowNewModal(false)}
@@ -349,9 +465,9 @@ export function CasesPage() {
                 <button
                   type="submit"
                   disabled={creating}
-                  className="px-4 py-2 rounded-lg bg-blue-600 text-xs font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-xs font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50 shadow-xs"
                 >
-                  {creating ? 'Structuring Issue...' : 'Create Case'}
+                  {creating ? 'Creating Case...' : 'Create Validated Case'}
                 </button>
               </div>
             </form>

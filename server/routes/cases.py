@@ -172,3 +172,4 @@ async def get_case_audit_trail(case_id: str):
     if not store.get_case(case_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Case '{case_id}' not found")
     return store.get_case_audit_trail(case_id)
+

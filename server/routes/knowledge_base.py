@@ -27,3 +27,4 @@ async def get_knowledge_article(article_id: str):
             detail=f"Knowledge article '{article_id}' not found",
         )
     return article
+

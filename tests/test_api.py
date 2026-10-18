@@ -97,6 +97,42 @@ class TestResolutionOpsAPI(unittest.TestCase):
         self.assertEqual(res.status_code, 422)
         self.assertIn("verification checklist has not passed", res.json()["detail"])
 
+    def test_ai_intake_parse(self):
+        complaint = (
+            "Our API returned 200 for order ORD-98421 at 04:15 UTC, but dashboard says pending. "
+            "Trace ID is req-8849-a1fc. This is blocking fulfillment for our enterprise buyers."
+        )
+        res = self.client.post(
+            "/api/ai/intake-parse",
+            json={"unstructured_complaint": complaint, "customer_id": "cust-northstar"},
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(len(data["concise_summary"]) > 0)
+        self.assertIn("ORD-98421", data["request_ids"])
+        self.assertEqual(data["suggested_severity"], "Sev-1")
+        self.assertGreaterEqual(len(data["clarification_questions"]), 1)
+
+    def test_ai_investigate_and_handoff(self):
+        # 1. Investigate
+        res = self.client.post("/api/ai/cases/CASE-2026-0891/investigate")
+        self.assertEqual(res.status_code, 200)
+        hypotheses = res.json()["hypotheses"]
+        self.assertGreaterEqual(len(hypotheses), 1)
+
+        # 2. Handoff
+        hnd_res = self.client.post("/api/ai/cases/CASE-2026-0891/generate-handoff")
+        self.assertEqual(hnd_res.status_code, 200)
+        handoff = hnd_res.json()
+        self.assertTrue(handoff["is_complete"])
+        self.assertEqual(handoff["status"], "ready_for_engineering")
+
+        # 3. Customer response draft
+        cust_res = self.client.get("/api/ai/cases/CASE-2026-0891/customer-response")
+        self.assertEqual(cust_res.status_code, 200)
+        self.assertIn("Sarah", cust_res.json()["draft"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

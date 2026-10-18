@@ -23,3 +23,4 @@ async def get_customer(customer_id: str):
             detail=f"Customer '{customer_id}' not found",
         )
     return customer
+

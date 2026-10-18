@@ -48,3 +48,4 @@ async def run_diagnostic_tool(req: DiagnosticToolExecutionRequest):
         result.evidence_record_id = ev_record.id
 
     return result
+
