@@ -207,3 +207,68 @@ export interface DiagnosticToolExecutionResponse {
   data: unknown
   evidence_record_id?: string | null
 }
+
+// ============================================================================
+// RBAC & Persona Types
+// ============================================================================
+
+export type UserRole = 'support_engineer' | 'support_lead' | 'platform_engineer'
+
+export interface DemoPersona {
+  id: string
+  display_name: string
+  email: string
+  role: UserRole
+  avatar_initials: string
+  title: string
+}
+
+export interface PersonaListResponse {
+  personas: DemoPersona[]
+  active_persona_id: string
+}
+
+export interface CurrentPersonaResponse {
+  persona: DemoPersona
+  permissions: string[]
+  role_display: string
+}
+
+// ============================================================================
+// Conversational Assistant Types
+// ============================================================================
+
+export interface AssistantMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface AskResponse {
+  answer: string
+  case_id: string
+}
+
+// ============================================================================
+// Settings / System Status Types
+// ============================================================================
+
+export interface SystemStatus {
+  ai: {
+    gemini_available: boolean
+    model: string
+    provider: string
+    mode: string
+  }
+  persona: {
+    id: string
+    display_name: string
+    role: string
+    title: string
+  }
+  data: {
+    total_customers: number
+    total_cases: number
+    total_knowledge_articles: number
+    is_demonstration_data: boolean
+  }
+}

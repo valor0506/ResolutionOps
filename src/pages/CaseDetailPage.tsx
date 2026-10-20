@@ -14,8 +14,10 @@ import {
   Sparkles,
   Layers,
   MessageSquare,
+  Bot,
 } from 'lucide-react'
 import { apiFetch } from '../lib/api'
+import { InvestigationAssistant } from '../components/investigation/InvestigationAssistant'
 import type {
   Case,
   Customer,
@@ -57,6 +59,9 @@ export function CaseDetailPage() {
   const [generatingHandoff, setGeneratingHandoff] = useState(false)
   const [customerDraft, setCustomerDraft] = useState<string>('')
   const [draftingResponse, setDraftingResponse] = useState(false)
+
+  // Investigation assistant drawer
+  const [assistantOpen, setAssistantOpen] = useState(false)
 
   useEffect(() => {
     let ignore = false
@@ -316,6 +321,13 @@ ${handoff.acceptance_criteria.map((c) => `- [ ] ${c}`).join('\n')}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setAssistantOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-medium text-white hover:bg-blue-700 transition-colors shadow-xs"
+            >
+              <Bot className="h-3.5 w-3.5" />
+              Ask Assistant
+            </button>
             <button
               onClick={() => setActiveTab('diagnostics')}
               className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-medium text-white hover:bg-slate-800 transition-colors shadow-xs"
@@ -956,6 +968,14 @@ ${handoff.acceptance_criteria.map((c) => `- [ ] ${c}`).join('\n')}
           )}
         </div>
       </div>
+
+      {/* Investigation Assistant Drawer */}
+      <InvestigationAssistant
+        caseId={caseId ?? ''}
+        caseName={`${caseData.id}: ${caseData.title}`}
+        open={assistantOpen}
+        onClose={() => setAssistantOpen(false)}
+      />
     </div>
   )
 }

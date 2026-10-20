@@ -8,10 +8,13 @@ from server.routes.knowledge_base import router as knowledge_base_router
 from server.routes.diagnostics import router as diagnostics_router
 from server.routes.overview import router as overview_router
 from server.routes.ai import router as ai_router
+from server.routes.auth import router as auth_router
+from server.routes.assistant import router as assistant_router
+from server.routes.settings import router as settings_router
 
 app = FastAPI(
     title="ResolutionOps API",
-    version="0.1.0",
+    version="0.2.0",
     description="AI-powered customer issue investigation platform",
 )
 
@@ -32,3 +35,6 @@ app.include_router(knowledge_base_router, prefix="/api")
 app.include_router(diagnostics_router, prefix="/api")
 app.include_router(overview_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
+app.include_router(assistant_router, prefix="/api")
+app.include_router(settings_router, prefix="/api")
